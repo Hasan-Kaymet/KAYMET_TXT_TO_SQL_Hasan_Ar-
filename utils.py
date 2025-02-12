@@ -12,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
 
-async def generate_sql_query(natural_query: str) -> str:
+def generate_sql_query(natural_query: str) -> str:
     """Generate an optimized SQL query from a natural language query using a hybrid prompting technique.
 
     This function instructs the model to perform an internal self-critique to ensure that the SQL query is
@@ -74,7 +74,7 @@ async def generate_sql_query(natural_query: str) -> str:
     user_prompt = f"Convert this natural language query into SQL: {natural_query}"
 
     try:
-        response = await openai.chat.completions.create(
+        response = openai.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -82,7 +82,8 @@ async def generate_sql_query(natural_query: str) -> str:
             ],
 
         )
-        sql_query_response = response.choices[0].message["content"].strip()
+        sql_query_response = response.choices[0].message.content.strip()
+        
         return sql_query_response
 
     except openai.APIConnectionError as e:
