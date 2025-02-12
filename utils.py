@@ -34,7 +34,7 @@ async def generate_sql_query(natural_query: str) -> str:
 
       3. Stores:
          - StoreID
-         - State
+         - State (two-letter code e.g. NY, IL, TX)
          - ZipCode
 
     The model is instructed to perform self-critique internally to validate its SQL logic, but only return
@@ -64,7 +64,7 @@ async def generate_sql_query(natural_query: str) -> str:
         "   - Timestamp (y-m-d hour:minute:second)\n\n"
         "3. Stores:\n"
         "   - StoreID\n"
-        "   - State\n"
+        "   - State (two-letter code e.g. NY, IL, TX)\n"
         "   - ZipCode\n\n"
         "When given a natural language query, generate an optimized, syntactically correct SQL query that "
         "adheres to the above schema. Internally, perform a self-critique to verify that the SQL is logically sound and "
@@ -80,6 +80,7 @@ async def generate_sql_query(natural_query: str) -> str:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+
         )
         sql_query_response = response.choices[0].message["content"].strip()
         return sql_query_response

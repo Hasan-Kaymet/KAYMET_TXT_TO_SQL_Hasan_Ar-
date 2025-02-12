@@ -42,7 +42,7 @@ async def generate_sql(
     Returns:
         Dict[str, str]: A dictionary with the generated SQL statement under the key "sql".
     """
-    sql_query = utils.generate_sql_query(query_request.query)
+    sql_query = await utils.generate_sql_query(query_request.query)
     if sql_query.startswith("-- Error"):
         raise HTTPException(status_code=500, detail=sql_query)
     return {"sql": sql_query}
@@ -64,7 +64,7 @@ async def execute_sql_endpoint(
     Returns:
         List[Dict[str, Any]]: A list of dictionaries representing the query result rows.
     """
-    results = utils.execute_sql(sql_request.sql)
+    results = await utils.execute_sql(sql_request.sql)
     if results and "error" in results[0]:
         raise HTTPException(status_code=400, detail=results[0]["error"])
     return results
