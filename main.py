@@ -1,16 +1,14 @@
+import os
 from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
-import utils
-import os
 from dotenv import load_dotenv
+import utils
 
-# .env dosyasındaki ortam değişkenlerini yükler
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
-
 
 class RequestQuery(BaseModel):
     """Class for natural language requests"""
