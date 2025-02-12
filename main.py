@@ -1,8 +1,13 @@
 from typing import Any, Dict, List
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import utils
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
