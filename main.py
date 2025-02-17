@@ -2,11 +2,8 @@ import os
 from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
 import utils
 
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
