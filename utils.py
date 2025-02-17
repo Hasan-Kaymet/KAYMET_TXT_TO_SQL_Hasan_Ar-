@@ -7,11 +7,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
 
-# Load API key from environment variable (e.g., via a .env file)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
-
-
 def generate_sql_query(natural_query: str) -> str:
     """Generate an optimized SQL query from a natural language query using a hybrid prompting technique.
 
@@ -72,32 +67,18 @@ def generate_sql_query(natural_query: str) -> str:
     )
 
     user_prompt = f"Convert this natural language query into SQL: {natural_query}"
+   
+    response = openai.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
 
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-
-        )
-        sql_query_response = response.choices[0].message.content.strip()
-        
-        return sql_query_response
-
-    except openai.APIConnectionError as e:
-        print(f"-- Error: Failed to connect to OpenAI API: {e}")
-        return f"-- Error generating sql statement: {str(e)}"
-
-    except openai.RateLimitError as e:
-        print(f"-- Error: OpenAI API request exceeded rate limit: {e}")
-        return f"-- Error generating sql statement: {str(e)}"
-
-    except openai.APIError as e:
-        print(f"-- Error: OpenAI API returned an API Error: {e}")
-        return f"-- Error generating sql statement: {str(e)}"
-
+    )
+    sql_query_response = response.choices[0].message.content.strip()
+    
+    return sql_query_response
 
 def execute_sql(sql: str) -> List[Dict[str, str]]:
     results: List[Dict[str, str]] = []
@@ -112,4 +93,5 @@ def execute_sql(sql: str) -> List[Dict[str, str]]:
         connection.close()
     except sqlite3.Error as e:
         results.append({"error": str(e)})
+    print(results)
     return results
