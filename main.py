@@ -67,30 +67,32 @@ async def execute_sql_endpoint(
     results = utils.execute_sql(sql_request.sql)
     return results
 
-
-
-
-@app.post("/final-report", response_model=Dict[str, Any])
-def final_report_endpoint(
-    query_request: QueryRequest = Body(..., description="Natural language query.")
-) -> Dict[str, Any]:
+@app.post("/final-report")
+def final_report_endpoint(query_request: QueryRequest) -> Dict[str, Any]:
     """
-    This endpoint receives a natural language query, generates a SQL query, executes it, 
-    and produces a final detailed analysis report based on the SQL query and its results.
-    """
+    Converts a natural language query into a SQL query, executes it,
+    and returns a concise final report based on the results.
     
+    Args:
+        query_request (QueryRequest): Contains the natural language query.
+    
+    Returns:
+        Dict[str, Any]: A dictionary containing:
+            - "sql": The generated SQL query,
+            - "results": The SQL query results,
+            - "final_report": A concise analysis of those results.
+    """
+    # 1. Generate the SQL query from the natural language input.
     sql_output = utils.generate_sql_query_in_json(query_request.query)
     sql_query = sql_output.get("sql")
 
-    
     sql_results = utils.execute_sql(sql_query)
 
-    
+    # 3. Generate the final report.
     final_report = utils.generate_final_report(sql_query, sql_results)
 
-    final_output = {
+    return {
         "sql": sql_query,
         "results": sql_results,
         "final_report": final_report
     }
-    return final_output
