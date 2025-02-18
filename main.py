@@ -32,12 +32,6 @@ def generate_sql(
 ) -> Dict[str, str]:
     """
     Endpoint to generate an SQL query from a natural language query.
-
-    Args:
-        query_request (RequestQuery): The request body containing the natural language query.
-
-    Returns:
-        Dict[str, str]: A dictionary with the generated SQL statement under the key "sql".
     """
     sql_query = utils.generate_sql_query(query_request.query)
     if sql_query.startswith("-- Error"):
@@ -54,12 +48,6 @@ async def execute_sql_endpoint(
 ) -> List[Dict[str, Any]]:
     """
     This is an endpoint that executes an SQL query against the SQLite database.
-
-    Args:
-        sql_request (SQLRequest): The request body containing the SQL query.
-
-    Returns:
-        List[Dict[str, Any]]: A list of dictionaries representing the query result rows.
     """
     results = utils.execute_sql(sql_request.sql)
     if results and "error" in results[0]:
