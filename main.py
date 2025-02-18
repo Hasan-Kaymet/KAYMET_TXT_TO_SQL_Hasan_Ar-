@@ -4,7 +4,6 @@ from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
 import utils
 
-
 app = FastAPI()
 
 class RequestQuery(BaseModel):
