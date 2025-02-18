@@ -22,6 +22,12 @@ class SQLRequest(BaseModel):
     )
 
 
+class QueryRequest(BaseModel):
+    query: str = Field(..., description="The natural language query for generating SQL and final report.")
+
+
+
+
 @app.post("/generate-sql", response_model=Dict[str, str])
 def generate_sql(
     query_request: RequestQuery = Body(
@@ -52,3 +58,31 @@ async def execute_sql_endpoint(
     if results and "error" in results[0]:
         raise HTTPException(status_code=400, detail=results[0]["error"])
     return results
+
+
+
+
+@app.post("/final-report", response_model=Dict[str, Any])
+def final_report_endpoint(
+    query_request: QueryRequest = Body(..., description="Natural language query.")
+) -> Dict[str, Any]:
+    """
+    This endpoint receives a natural language query, generates a SQL query, executes it, 
+    and produces a final detailed analysis report based on the SQL query and its results.
+    """
+    
+    sql_output = utils.generate_sql_query_in_json(query_request.query)
+    sql_query = sql_output.get("sql")
+
+    
+    sql_results = utils.execute_sql(sql_query)
+
+    
+    final_report = utils.generate_final_report(sql_query, sql_results)
+
+    final_output = {
+        "sql": sql_query,
+        "results": sql_results,
+        "final_report": final_report
+    }
+    return final_output
