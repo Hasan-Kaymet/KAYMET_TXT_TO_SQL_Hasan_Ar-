@@ -13,10 +13,9 @@ openai.api_key = OPENAI_API_KEY
 
 def generate_sql_query(natural_query: str) -> str:
     """
-    Convert a natural language query into an optimized SQL statement for our SQLite DB.
-    Uses GPT-4 with a schema-aware prompt (Products, Transactions, Stores) and internal self-critique.
+    Converts a natural language query into an optimized SQL statement for our SQLite DB.
+    Uses GPT-4o with a schema-aware prompt (Products, Transactions, Stores) and internal self-critique.
     """
-    # Create a detailed system prompt with database schema and instructions for self-critique.
     system_prompt = (
     "You are an expert SQL query generator specialized in SQLite. "
     "You are provided with the following database schema:\n\n"
@@ -63,6 +62,13 @@ def generate_sql_query_in_json(natural_query: str) -> Dict[str, str]:
     """
     Convert a natural language query into a valid SQL query.
     Return the output in JSON format with a single key: 'sql'.
+
+     Args:
+        natural_query (str): The natural language query to convert.
+
+    Returns:
+        Dict[str, str]: A dictionary containing a single key 'sql' with the generated SQL query.        
+    
     """
     system_prompt = (
         "You are a database reporting expert specialized in SQLite. "
@@ -105,7 +111,17 @@ def generate_sql_query_in_json(natural_query: str) -> Dict[str, str]:
 
 def generate_final_report(sql_query: str, aggregated_results: Dict[str, Any]) -> str:
     """
-    SQL sorgusunun döndürdüğü özet veriye dayanarak, yalnızca bu verileri özetleyen kısa bir final raporu oluşturur.
+    A function that generates final report based on the sql query results.Model analyses the results and make explanations accordingly. 
+
+    Args:
+    query_request (QueryRequest): A request model containing the natural language query.
+
+    Returns:
+    Dict[str, Any]: A dictionary containing:
+        - "sql": The generated SQL query as a string.
+        - "results": A list of dictionaries representing the SQL query results.
+        - "final_report": A detailed analysis report generated from the SQL query and its results.
+
     """
     aggregated_json = json.dumps(aggregated_results, ensure_ascii=False, indent=2)
     user_prompt = (
@@ -126,15 +142,23 @@ def generate_final_report(sql_query: str, aggregated_results: Dict[str, Any]) ->
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=200,
-        temperature=0,
     )
     final_report = response.choices[0].message.content.strip()
     return final_report
 
 
-def execute_sql(sql: str) -> List[Dict[str, str]]:
-    results: List[Dict[str, str]] = []
+def execute_sql(sql: str) -> List[Dict[str, Any]]:
+    """
+    A utilty function that executes sql.
+
+    Args:
+    takes a string value(sql query)
+
+    Returns:
+    List of dictionaries (str,str)
+
+    """
+    results: List[Dict[str, Any]] = []
     connection = sqlite3.connect("data.db")
     connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
