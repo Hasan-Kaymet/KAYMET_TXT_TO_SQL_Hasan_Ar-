@@ -208,3 +208,71 @@ def execute_sql(sql: str) -> List[Dict[str, Any]]:
         results.append(dict(row))
     connection.close()
     return results
+
+
+
+def build_system_prompt_for_intention() -> str:
+    """
+    Builds the system prompt that instructs GPT to decide between chat and SQL generation.
+
+    Returns:
+        str: The system prompt content.
+    """
+    return (
+        "You are an all-purpose AI assistant that can either have a friendly conversation or "
+        "generate a SQL query to retrieve data from a SQLite database. "
+        "Analyze the user message: if it's a normal greeting or question unrelated to database queries, "
+        "respond with type='chat' and provide a reply. If the user wants data from the database, "
+        "respond with type='sql' and provide a valid SQL query. "
+        "Return your answer strictly in JSON format with 'type' set to 'chat' or 'sql', "
+        "'reply' if type=chat, and 'query' if type=sql. No extra text or code fences."
+    )
+
+def build_functions_schema() -> list:
+    """
+    Builds the function schema that GPT uses to return structured JSON.
+    
+    Returns:
+        list: A list containing the function definition used by GPT for function calling.
+    """
+    return [
+        {
+            "name": "determineAction",
+            "description": "Decide whether user wants general chat or an SQL query, then return appropriate JSON.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "Either 'chat' or 'sql'."
+                    },
+                    "reply": {
+                        "type": "string",
+                        "description": "A friendly chat reply for general conversation."
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "The generated SQL query if the user wants data."
+                    }
+                },
+                "required": ["type"],
+                "additionalProperties": False
+            }
+        }
+    ]
+
+
+def parse_function_arguments(response: Any) -> Dict[str, Any]:
+    """
+    Extracts and parses the arguments from GPT's function call.
+    
+    Args:
+        response (Any): The response object from openai.chat.completions.create.
+    
+    Returns:
+        Dict[str, Any]: The parsed JSON data containing 'type', 'reply', and/or 'query'.
+    """
+    
+    arguments_str = response.choices[0].message.function_call.arguments
+    parsed_args = json.loads(arguments_str)
+    return parsed_args

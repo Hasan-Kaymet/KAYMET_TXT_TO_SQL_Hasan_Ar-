@@ -1,10 +1,16 @@
 import os
 from typing import Any, Dict, List
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, Body
 from pydantic import BaseModel, Field
 import utils
+import openai
 
 app = FastAPI()
+
+
+class UserMessage(BaseModel):
+    """Simple model to capture the user's message for intention."""
+    message: str
 
 class RequestQuery(BaseModel):
     """Class for natural language requests"""
@@ -82,13 +88,12 @@ def final_report_endpoint(query_request: QueryRequest) -> Dict[str, Any]:
             - "results": The SQL query results,
             - "final_report": A concise analysis of those results.
     """
-    # 1. Generate the SQL query from the natural language input.
+
     sql_output = utils.generate_sql_query_in_json(query_request.query)
     sql_query = sql_output.get("sql")
 
     sql_results = utils.execute_sql(sql_query)
 
-    # 3. Generate the final report.
     final_report = utils.generate_final_report(sql_query, sql_results)
 
     return {
@@ -96,3 +101,43 @@ def final_report_endpoint(query_request: QueryRequest) -> Dict[str, Any]:
         "results": sql_results,
         "final_report": final_report
     }
+
+
+@app.post("/decide")
+def decide_context(user_message: UserMessage) -> Dict[str, Any]:
+    """
+    Endpoint that lets GPT decide the context:
+    - If user wants general chat, returns {"type": "chat", "reply": "..."}.
+    - If user wants SQL data, returns {"type": "sql", "query": "..."}.
+    """
+
+    system_prompt = utils.build_system_prompt_for_intention()
+
+
+    functions_schema = utils.build_functions_schema()
+
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message.message},
+    ]
+
+    response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        functions=functions_schema,
+        function_call={"name": "determineAction"},
+    )
+
+    parsed = utils.parse_function_arguments(response)
+
+    if parsed["type"] == "chat":
+        return {
+            "type": "chat",
+            "reply": parsed.get("reply", "")
+        } 
+    return {
+        "type": "sql",
+        "query": parsed.get("query", "")
+    }
+    
