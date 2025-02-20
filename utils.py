@@ -344,6 +344,7 @@ def merge_final_output_with_json_mode_multi_turn(partial_data: dict) -> str:
         "You are a function that merges partial data into one cohesive 'merged_message'. "
         "Combine 'reply', 'final_report', and optionally 'results' into a single, user-facing text. "
         "Return the final text in 'merged_message'."
+        "Give the final text in the language of reply."
     )
 
     # We pass partial_data plus an empty 'merged_message' so GPT can fill it

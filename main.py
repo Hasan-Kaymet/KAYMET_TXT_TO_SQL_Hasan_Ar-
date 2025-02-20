@@ -11,7 +11,6 @@ MULTI_TURN_ITERATION_MAX = 8
 app = FastAPI()
 
 
-
 class SQLRequest(BaseModel):
     """Class for sql returns and executions"""
     sql: str = Field(
@@ -183,7 +182,7 @@ def assistant_endpoint(chat_req: ChatRequest) -> Dict[str, Any]:
                 "turn": turn_count,
                 "query": gpt_query,
                 "results": db_results,
-                "merged_message": merged_message
+                "steps": merged_message
             })
 
             # also insert the DB results as a system message so GPT sees them next turn
