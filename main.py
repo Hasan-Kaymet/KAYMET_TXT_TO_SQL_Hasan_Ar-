@@ -12,14 +12,6 @@ app = FastAPI()
 
 
 
-class RequestQuery(BaseModel):
-    """Class for natural language requests"""
-    query: str = Field(
-        ...,
-        description="The natural language query to be transformed into an SQL statement."
-    )
-
-
 class SQLRequest(BaseModel):
     """Class for sql returns and executions"""
     sql: str = Field(
@@ -31,6 +23,11 @@ class ChatRequest(BaseModel):
     """Class for the chat request with Persona,SessionId (for the chat history)"""
     sessionId: str
     message: str
+
+class QueryRequest(BaseModel):
+    """Class for natural query that generates sql that will be used to feed gpt for final report of sql query results."""
+    query: str = Field(..., description="The natural language query for generating SQL and final report.")
+
 
 @app.post("/generate-sql", response_model=Dict[str, str])
 def generate_sql(
@@ -69,6 +66,7 @@ async def execute_sql_endpoint(
     """
     results = utils.execute_sql(sql_request.sql)
     return results
+
 
 #Merged olarak hepsi birleşitirildi iteration sayısı max 8 
 @app.post("/chat")
@@ -246,23 +244,6 @@ def build_integrated_system_prompt() -> str:
         "and possibly produce another query in a new turn. Only produce 'type'='done' after all queries are concluded.\n"
         "- ORDER BY clause should come after UNION, not before (avoid syntax errors).\n\n"
 
-        "Schema:\n"
-        "1. Products:\n"
-        "   - ProductID (INTEGER PRIMARY KEY)\n"
-        "   - Name (TEXT)\n"
-        "   - Category1 (TEXT: 'Men', 'Women', 'Kids')\n"
-        "   - Category2 (TEXT: 'Sandals', 'Casual Shoes', 'Boots', 'Sports Shoes')\n\n"
-        "2. Transactions:\n"
-        "   - StoreID (INTEGER)\n"
-        "   - ProductID (INTEGER)\n"
-        "   - Quantity (INTEGER)\n"
-        "   - PricePerQuantity (REAL)\n"
-        "   - Timestamp (TEXT 'YYYY-MM-DD HH:MM:SS')\n\n"
-        "3. Stores:\n"
-        "   - StoreID (INTEGER PRIMARY KEY)\n"
-        "   - State (TEXT, two-letter code)\n"
-        "   - ZipCode (TEXT)\n\n"
-
         "Remember:\n"
         " - 'type':'chat'  => 'query':''\n"
         " - 'type':'sql'   => 'query': a single read-only SQL statement\n"
@@ -315,9 +296,4 @@ def build_function_schema() -> list:
             }
         }
     ]
-
-
-
-
-
 
