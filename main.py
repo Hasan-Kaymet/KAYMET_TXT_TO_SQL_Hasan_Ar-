@@ -212,10 +212,6 @@ def assistant_endpoint(chat_req: ChatRequest) -> Dict[str, Any]:
         "turns_executed": turn_count
     }
 
-
-
-
-
 def build_integrated_system_prompt() -> str:
     """
     Returns the big system prompt that handles multi-turn chat and SQL generation with self-critique.
