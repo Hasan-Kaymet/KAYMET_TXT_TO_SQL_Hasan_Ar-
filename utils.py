@@ -50,6 +50,8 @@ def generate_sql_query(natural_query: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
+        temperature=0.0,
+        top_p=1.0,
 
     )
     sql_query_response = response.choices[0].message.content.strip()
@@ -128,6 +130,8 @@ def get_explanation_and_sql(user_text: str) -> Dict[str, str]:
         ],
         functions=functions,
         function_call={"name": "generateExplanationAndSQL"},
+        temperature=0.0,
+        top_p=1.0,
     )
 
     function_args = response.choices[0].message.function_call.arguments
@@ -266,43 +270,6 @@ def build_function_schema_assistant() -> list:
     ]
 
 
-def generate_merged_response(
-    original_request: str, 
-    explanation: str, 
-    sql_query: str, 
-    db_results: List[Dict[str, Any]]
-) -> str:
-    """
-    Optionally merges the original request, the partial explanation, and 
-    the DB results into a single final output (2nd GPT pass).
-    """
-    if not db_results:
-        return explanation  # no results, just return the partial explanation
-
-    system_prompt = (
-        "You are a helpful assistant. Combine the user's request, the partial explanation, "
-        "and the DB results into one cohesive answer. Provide it in plain text."
-    )
-
-    user_message = (
-        f"User's original request: {original_request}\n"
-        f"Partial explanation: {explanation}\n"
-        f"SQL Query: {sql_query}\n"
-        f"DB Results: {json.dumps(db_results, ensure_ascii=False, indent=2)}\n\n"
-        "Please provide a final combined answer, referencing all relevant details."
-    )
-
-    response = openai.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-    )
-
-    return response.choices[0].message.content.strip()
-
-
 def generate_plain_report(original_request: str, db_results: List[Dict[str, Any]]) -> str:
     """
     Produces a final, plain-language report from the SQL query results,
@@ -340,84 +307,107 @@ def generate_plain_report(original_request: str, db_results: List[Dict[str, Any]
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
+        temperature=0.0,
+        top_p=1.0,
     )
 
     return response.choices[0].message.content.strip()
 
-def merge_final_output_with_json_mode(existing_json: dict) -> str:
+
+
+def merge_final_output_with_json_mode_multi_turn(partial_data: dict) -> str:
     """
-    Use GPT function calling to feed an existing JSON (reply, final_report, etc.)
-    and let GPT produce a 'merged_message' result.
+    Uses GPT function calling to merge fields like 'reply', 'final_report', and 'results'
+    into a single final 'merged_message' without manually stitching text in Python.
+
+    partial_data might be something like:
+    {
+      "reply": "Here's the best-selling product.",
+      "final_report": "Best seller is Orbit with 15,265 units sold.",
+      "results": [ { "Name":"Orbit", "TotalQuantitySold":15265 } ]
+    }
+
+    We expect GPT to return {
+      "reply":"...",
+      "final_report":"...",
+      "results": [...],
+      "merged_message":"<unified text>"
+    }
+    and we return merged_message.
     """
+
     # 1) The function schema
-    merge_schema = [
+    merge_schema = build_merge_schema()
+
+    # 2) The system prompt instructing GPT how to merge
+    system_prompt = (
+        "You are a function that merges partial data into one cohesive 'merged_message'. "
+        "Combine 'reply', 'final_report', and optionally 'results' into a single, user-facing text. "
+        "Return the final text in 'merged_message'."
+    )
+
+    # We pass partial_data plus an empty 'merged_message' so GPT can fill it
+    arguments_for_gpt = {**partial_data, "merged_message": ""}
+
+    # 3) We'll provide the partial data in the user content (NOT function_call on user)
+    #    so the system sees it. But we do NOT attach function_call to a user message.
+    user_message = {
+        "role": "user",
+        "content": (
+            "Please merge the fields (reply, final_report, results) into 'merged_message'.\n"
+            f"Here is the JSON:\n{json.dumps(arguments_for_gpt, ensure_ascii=False, indent=2)}"
+        )
+    }
+
+    # 4) Call GPT in function-calling mode, specifying the function_call at top level
+    response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            user_message
+        ],
+        functions=merge_schema,
+        function_call={"name": "mergeFinalOutput"},  # We ask GPT to call mergeFinalOutput
+        temperature=0.0,
+
+    )
+    
+    # 5) Parse GPT's function call arguments from the assistant role
+    merged_data_str = response.choices[0].message.function_call.arguments
+    
+    merged_data = json.loads(merged_data_str)
+    print(merged_data)
+
+    # 'merged_data' should have { "reply":"...", "final_report":"...", "results":..., "merged_message":"..." }
+    return merged_data["merged_message"]
+
+
+def build_merge_schema() -> list:
+    return [
         {
             "name": "mergeFinalOutput",
-            "description": "Merge the 'reply' and 'final_report' fields into one final plain-text message.",
+            "description": "Combine partial fields (reply, final_report, results) into 'merged_message'.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "reply": {
-                        "type": "string",
-                        "description": "Partial conversation."
-                    },
-                    "final_report": {
-                        "type": "string",
-                        "description": "Summarized data or analysis."
+                    "reply": {"type": "string"},
+                    "final_report": {"type": "string"},
+                    "results": {
+                        "type": "array",
+                        "items": {}
                     },
                     "merged_message": {
                         "type": "string",
-                        "description": "The final merged message in plain text."
+                        "description": "The final merged text."
                     }
                 },
-                "required": ["reply", "final_report","merged_message"],
+                "required": ["reply", "merged_message"],
                 "additionalProperties": True
             }
         }
     ]
 
-    # 2) We'll instruct GPT in the system prompt not to show the JSON, 
-    #    but produce only 'merged_message'.
-    system_prompt = (
-        "You are a helpful assistant that merges partial conversation and final_report "
-        "into one cohesive plain-text message. Do not reveal SQL or technical details. "
-        "Only fill out 'merged_message' with the final text, referencing 'reply' and 'final_report'."
-        "No need to explain steps of calculation the data just explain the info we get."
-    )
 
-    # 3) We'll pass the existing JSON object as if we are "calling" the function with known arguments.
-    #    But the key we want GPT to fill is 'merged_message'.
-    arguments_for_gpt = {**existing_json, "merged_message": ""}  # So GPT sees current data, but 'merged_message' is blank.
-
-    # 4) We create a user message that indicates we want GPT to fill in the function call
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": (
-                "Please merge 'reply' and 'final_report' into 'merged_message'. "
-                "Here is the JSON:\n"
-                f"{json.dumps(arguments_for_gpt, indent=2)}"
-            ),
-        }
-    ]
-
-    response = openai.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        functions=merge_schema,
-        function_call={"name": "mergeFinalOutput"},
-    )
-
-    # 5) GPT should respond with function_call arguments that include the merged_message
-    merged_data_str = response.choices[0].message.function_call.arguments
-    print(merged_data_str)
-    merged_data = json.loads(merged_data_str)
-
-    #print("12312")
-
-    # 'merged_data' should have { "reply": "...", "final_report": "...", "merged_message": "..." }
-    return merged_data["merged_message"]
 
 
 def is_read_only_sql(sql: str) -> bool:
