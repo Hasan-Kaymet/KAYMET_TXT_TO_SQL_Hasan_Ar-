@@ -28,6 +28,12 @@ class QueryRequest(BaseModel):
     """Class for natural query that generates sql that will be used to feed gpt for final report of sql query results."""
     query: str = Field(..., description="The natural language query for generating SQL and final report.")
 
+class RequestQuery(BaseModel):
+    query_request: str = Field(
+        ...,
+        description="The request body containing the natural language query."
+    )
+
 
 @app.post("/generate-sql", response_model=Dict[str, str])
 def generate_sql(
