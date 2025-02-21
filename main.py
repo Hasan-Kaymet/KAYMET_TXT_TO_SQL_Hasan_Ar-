@@ -6,9 +6,24 @@ from pydantic import BaseModel, Field
 import openai
 import utils
 import db_utils
+from fastapi.middleware.cors import CORSMiddleware
 
 MULTI_TURN_ITERATION_MAX = 8
 app = FastAPI()
+
+
+origins = [
+    "http://localhost:3000",  # React uygulamasının çalıştığı adres
+    # İsterseniz başka origin'ler de ekleyebilirsiniz
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,       # Hangi origin'lere izin verileceği
+    allow_credentials=True,      # Credential (örneğin cookie) gönderimine izin
+    allow_methods=["*"],         # Hangi HTTP method'larına izin
+    allow_headers=["*"],         # Hangi header'lara izin
+)
 
 
 class SQLRequest(BaseModel):
@@ -229,6 +244,28 @@ def build_integrated_system_prompt() -> str:
         "If they write in English, respond in English, etc.\n\n"  
         "only the schema below. Use SELECT, JOIN, WHERE, GROUP BY, ORDER BY, etc. for read-only. "
         "No INSERT, UPDATE, DELETE, DROP, or CREATE.\n\n"
+
+        """
+
+        "Database Schema:\n"
+        "1. Products:\n"
+        "   - ProductID (INTEGER PRIMARY KEY)\n"
+        "   - Name (TEXT)\n"
+        "   - Category1 (TEXT: 'Men', 'Women', 'Kids')\n"
+        "   - Category2 (TEXT: 'Sandals', 'Casual Shoes', 'Boots', 'Sports Shoes')\n\n"
+        "2. Transactions:\n"
+        "   - StoreID (INTEGER)\n"
+        "   - ProductID (INTEGER)\n"
+        "   - Quantity (INTEGER)\n"
+        "   - PricePerQuantity (REAL)\n"
+        "   - Timestamp (TEXT 'YYYY-MM-DD HH:MM:SS')\n\n"
+        "3. Stores:\n"
+        "   - StoreID (INTEGER PRIMARY KEY)\n"
+        "   - State (TEXT, two-letter code)\n"
+        "   - ZipCode (TEXT)\n\n"
+
+
+        """
 
         "Your possible 'type' values:\n"
         "  - 'chat': If the user's request does not require a database query.\n"
