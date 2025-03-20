@@ -83,6 +83,173 @@ class RequestQuery(BaseModel):
     )
 
 
+class CheckExecuteRequest(BaseModel):
+    """
+    The user provides a natural language query, e.g.:
+      "Show me men’s products"
+    We'll first check data availability, then proceed.
+    """
+    user_query: str = Field(..., description="The user’s natural language query.")
+
+
+@app.post("/check-and-execute")
+def check_and_execute(request: CheckExecuteRequest) -> Dict[str, Any]:
+    """Handles data availability check and SQL execution using a ping-pong approach with OpenAI.
+    
+    The function follows these steps:
+    1. First OpenAI API call - The model calls the quick_check_sql tool
+    2. Execute the quick_check_sql function
+    3. Second OpenAI API call - Include the data availability results
+    4. Generate and execute SQL query if data exists
+    5. Return the results
+    
+    Args:
+        request: The request object containing the user's natural language query.
+        
+    Returns:
+        A dictionary containing the message, SQL query, results, and AI response.
+    """
+    # Define the quick_check_sql tool
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "quick_check_sql",
+            "description": "Check if data is available in a given table with a condition.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string", "description": "The table name to check (Products, Transactions, or Stores)"},
+                    "condition": {"type": "string", "description": "The WHERE condition to apply (e.g. Category1='Men')"}
+                },
+                "required": ["table", "condition"]
+            }
+        }
+    }]
+
+    # System message with guidelines
+    system_message = (
+        "You are a database assistant. When given a natural language query, determine which table "
+        "needs to be checked and what condition to apply. Call the quick_check_sql tool with the "
+        "appropriate table name and condition to verify data exists before executing a query. "
+        "\n\nSchema:\n"
+        "1. Products:\n"
+        "   - ProductID (INTEGER PRIMARY KEY)\n"
+        "   - Name (TEXT)\n"
+        "   - Category1 (TEXT: 'Men', 'Women', 'Kids')\n"
+        "   - Category2 (TEXT: 'Sandals', 'Casual Shoes', 'Boots', 'Sports Shoes')\n\n"
+        "2. Transactions:\n"
+        "   - StoreID (INTEGER)\n"
+        "   - ProductID (INTEGER)\n"
+        "   - Quantity (INTEGER)\n"
+        "   - PricePerQuantity (REAL)\n"
+        "   - Timestamp (TEXT 'YYYY-MM-DD HH:MM:SS')\n\n"
+        "3. Stores:\n"
+        "   - StoreID (INTEGER PRIMARY KEY)\n"
+        "   - State (TEXT, two-letter code)\n"
+        "   - ZipCode (TEXT)\n\n"
+        "\nImportant guidelines for creating conditions:\n"
+        "1. When checking for exact matches in text fields (like Names), use LOWER() function on both sides "
+        "   to make the search case-insensitive. Example: LOWER(Name)=LOWER('orbit') instead of Name='orbit'\n"
+        "2. For product name searches where the user mentions a product name or type, use the pattern ' word ' "
+        "   with spaces before and after to ensure it's a whole word match.\n"
+        "3. Avoid substring matches that could lead to false positives. For example, "
+        "   searching for 'dog' should NOT match 'Dogma' because 'dog' is just a substring.\n"
+        "4. If the user mentions a specific category, always include that in your condition.\n"
+        "5. For numeric comparisons, use appropriate operators (>, <, >=, <=, =).\n"
+    )
+
+    # Create the initial messages array
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": request.user_query}
+    ]
+
+    # First API call
+    first_completion = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        tools=tools
+    )
+
+    # Process the first response
+    first_response = first_completion.choices[0].message
+    tool_calls = first_response.tool_calls
+
+    # If no tool was called, no database access is needed
+    if not tool_calls:
+        return {
+            "message": "No database access needed.",
+            "response": first_response.content
+        }
+
+    # Process the first tool call
+   
+    first_call = tool_calls[0]
+    if first_call.function.name != "quick_check_sql":
+        return {"message": f"Unexpected tool called: {first_call.function.name}"}
+        
+    args_str = first_call.function.arguments
+    args = json.loads(args_str)
+
+    # Extract table and condition
+    table = args.get("table", "")
+    condition = args.get("condition", "")
+    
+    if not table or not condition:
+        return {"message": "Missing table or condition in the tool call."}
+
+    data_exists = utils.quick_check_sql(table, condition)
+
+    # Second API call with the data check results
+    # Copy previous messages and add tool call result
+    second_messages = messages.copy()
+    
+    # Add the assistant message with tool call
+    second_messages.append({"role": "assistant", "content": None, "tool_calls": [
+        {
+            "id": first_call.id, 
+            "type": "function",
+            "function": {
+                "name": "quick_check_sql",
+                "arguments": args_str
+            }
+        }
+    ]})
+    
+    # Add the tool response
+    second_messages.append({
+        "role": "tool",
+        "tool_call_id": first_call.id,
+        "content": str(data_exists)  # Convert boolean to string
+    })
+    
+    # Make the second API call
+    second_completion = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=second_messages
+    )
+
+    
+    second_response = second_completion.choices[0].message
+    
+
+    if not data_exists:
+        return {
+            "message": f"No data found in {table} where {condition}.",
+            "response": second_response.content
+        }
+    
+
+    final_sql = utils.generate_sql_query(request.user_query)
+    query_results = utils.execute_sql(final_sql)
+
+    return {
+        "message": f"Data found in {table} where {condition}.",
+        "final_sql": final_sql,
+        "results": query_results,
+        "ai_response": second_response.content
+    }
+
 
 @app.post("/generate-sql", response_model=Dict[str, str])
 def generate_sql(

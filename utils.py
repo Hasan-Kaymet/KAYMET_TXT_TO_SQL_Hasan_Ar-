@@ -46,6 +46,11 @@ def generate_sql_query(natural_query: str) -> str:
         "that adheres exactly to the above schema. Perform internal self-critique to ensure the SQL is "
         "logically sound and free of syntax errors. Output only the raw SQL statement with no additional text, "
         "and do not include any markdown formatting, code fences, or triple backticks."
+         "1. When checking for exact matches in text fields (like Names), use the LOWER() function on both sides "
+        "   to make the search case-insensitive. Example: LOWER(Name)=LOWER('orbit') instead of Name='orbit'\n"
+        "3. If the user mentions a specific category, always include that in your condition.\n"
+        "4. For numeric comparisons, use appropriate operators (>, <, >=, <=, =).\n"
+
     )
 
     user_prompt = f"Convert this natural language query into SQL: {natural_query}"
@@ -466,3 +471,75 @@ def is_read_only_sql(sql: str) -> bool:
     upper_sql = sql.upper()
     return not any(keyword in upper_sql for keyword in forbidden)
 
+
+def quick_check_sql(table: str, condition: str) -> bool:
+    """Performs a quick check to verify data exists in a specified table and condition.
+    
+    Uses parameter validation to prevent SQL injection and performs case-insensitive search.
+    
+    Example:
+      table='Products', condition='Category2="Sandals" AND LOWER(Name)=LOWER("Orbit")'
+      => SELECT EXISTS(SELECT 1 FROM Products WHERE Category2="Sandals" AND LOWER(Name)=LOWER("Orbit"))
+    
+    Args:
+        table: The name of the table to check. Must be one of the known tables.
+        condition: The WHERE condition to apply. Will be validated.
+    
+    Returns:
+        True if any data matches, False otherwise.
+    
+    Raises:
+        ValueError: If the table name is invalid or the condition contains suspicious patterns.
+        sqlite3.Error: If an error occurs while executing the SQL query.
+    """
+    # Validate table name
+    valid_tables = ["Products", "Transactions", "Stores"]
+    if table not in valid_tables:
+        raise ValueError(f"Invalid table name: {table}. Must be one of {valid_tables}")
+    
+    # Check for dangerous patterns
+    dangerous_patterns = [";", "--", "/*", "*/", "UNION", "DROP", "DELETE", "UPDATE", "INSERT", "ALTER"]
+    for pattern in dangerous_patterns:
+        if pattern.upper() in condition.upper():
+            raise ValueError(f"Condition contains potentially dangerous pattern: {pattern}")
+    
+    connection = None
+    try:
+        connection = sqlite3.connect("data.db")
+        cursor = connection.cursor()
+        
+        # Execute the original SQL query
+        sql = f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {condition})"
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        
+        # If result is false and condition contains equality operator
+        # try case-insensitive search
+        if not bool(row[0]) and "=" in condition and "LOWER" not in condition.upper():
+            # Find equality expressions and add COLLATE NOCASE
+            modified_condition = ""
+            in_string = False
+            i = 0
+            
+            while i < len(condition):
+                if condition[i] in ['"', "'"]:
+                    in_string = not in_string
+                    modified_condition += condition[i]
+                elif condition[i] == '=' and not in_string:
+                    modified_condition += " COLLATE NOCASE ="
+                else:
+                    modified_condition += condition[i]
+                i += 1
+                
+            case_insensitive_sql = f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {modified_condition})"
+            cursor.execute(case_insensitive_sql)
+            row = cursor.fetchone()
+            
+        return bool(row[0])
+        
+    except sqlite3.Error as e:
+        print(f"Database error in quick_check_sql: {str(e)}")
+        raise
+    finally:
+        if connection:
+            connection.close()
